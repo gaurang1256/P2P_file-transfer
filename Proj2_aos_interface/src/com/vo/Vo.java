@@ -12,12 +12,14 @@ public class Vo implements Serializable {
 		return "Vo [indexName=" + indexName + ", peerServer_IP="
 				+ peerServer_IP + ", peerServer_port=" + peerServer_port + "]";
 	}
+	
 	public Vo(String indexName, String peerServer_IP, int peerServer_port) {
 		super();
 		this.indexName = indexName;
 		this.peerServer_IP = peerServer_IP;
 		this.peerServer_port = peerServer_port;
 	}
+	
 	public String getIndexName() {
 		return indexName;
 	}

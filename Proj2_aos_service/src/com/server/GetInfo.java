@@ -10,7 +10,6 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.rmi.NotBoundException;
@@ -22,7 +21,11 @@ import java.util.ArrayList;
 import java.util.Scanner;
 
 import com.Com_InterFace;
+import com.constants.SingletonRecords;
 import com.constants.StringConstants;
+import com.util.SupportFunc1;
+import com.vo.FileVO;
+import com.vo.TransferVo;
 import com.vo.Vo;
 
 public class GetInfo extends UnicastRemoteObject implements Serializable,
@@ -32,9 +35,6 @@ public class GetInfo extends UnicastRemoteObject implements Serializable,
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private String message_ID = null;
-	private int TTL = 0;
-	private String file_name = null;
 
 	public GetInfo() throws RemoteException {
 		super();
@@ -51,9 +51,8 @@ public class GetInfo extends UnicastRemoteObject implements Serializable,
 	public ArrayList<Vo> query(String message_ID, int TTL, String file_name)
 			throws IOException, NotBoundException, RemoteException {
 
-		this.message_ID = message_ID;
-		this.TTL = TTL;
-		this.file_name = file_name;
+		// this is the function for the query
+		SupportFunc1 sf1 = new SupportFunc1(message_ID, TTL, file_name);
 
 		ArrayList<Vo> returnUrl = new ArrayList<Vo>();
 		try {
@@ -61,19 +60,19 @@ public class GetInfo extends UnicastRemoteObject implements Serializable,
 			if (TTL <= StringConstants.TTL) {
 				// checking locally
 				System.out.println("checking localy");
-				if (checkFileLocaly(file_name) == true) {
+				if (sf1.checkFileLocaly(file_name) == true) {
 
 					returnUrl.add(new Vo(StringConstants.servername,
 							StringConstants.ip, StringConstants.port));
 
 					TTL++;// i need to incriment the time to live
 				}
-				if (check_configFile() == true) {
+				if (sf1.check_configFile() == true) {
 					System.out.println("checking with the peers");
-					ArrayList<Vo> tempList = getPeerList();
+					ArrayList<Vo> tempList = sf1.getPeerList();
 					for (Vo vo : tempList) {
 
-						ArrayList<Vo> tempgetBack = checkPeers(
+						ArrayList<Vo> tempgetBack = sf1.checkPeers(
 								vo.getIndexName(), vo.getPeerServer_IP(),
 								vo.getPeerServer_port());
 
@@ -93,85 +92,18 @@ public class GetInfo extends UnicastRemoteObject implements Serializable,
 		return returnUrl;
 	}
 
-	// this is to check if the file exist
-	public boolean checkFileLocaly(String file_name) {
-		boolean foundFile = false;
-		File file = new File(StringConstants.localDir);
-		File[] subFiles = file.listFiles();
-		for (File file2 : subFiles) {
-			if (file2.getName().matches(file_name) == true) {
-				foundFile = true;
-			}
-		}
-		return foundFile;
-
-	}
-
-	public boolean check_configFile() throws IOException {
-
-		boolean present = false;
-		File temp = new File(StringConstants.ip_config);
-		
-		if (temp.exists()) {
-			@SuppressWarnings("resource")
-			BufferedReader br = new BufferedReader(new FileReader(temp));
-			if (br.readLine() == null) {
-				/*
-				 * System.out.println("No errors, and file empty"); // here you
-				 * can put the return statement
-				 */
-				System.out.println("config file empty");
-				present = false;
-			} else {
-				present = true;
-			}
-		} else {
-			System.out.println("config file not set");
-			present = false;
-		}
-
-		return present;
-	}
-
-	public ArrayList<Vo> getPeerList() throws FileNotFoundException {
-		ArrayList<Vo> peerList = new ArrayList<Vo>();
-
-		@SuppressWarnings("resource")
-		Scanner scan = new Scanner(new File(StringConstants.ip_config));
-		while (scan.hasNext()) {
-			String[] temp = scan.next().split(":");
-			peerList.add(new Vo(temp[0], temp[1], Integer.parseInt(temp[2])));
-
-		}
-		return peerList;
-
-	}
-
-	public ArrayList<Vo> checkPeers(String indexServerName, String IP, int port)
-			throws NotBoundException, IOException {
-		Registry registry = LocateRegistry.getRegistry(IP, port);
-		Com_InterFace comp = (Com_InterFace) registry.lookup(indexServerName);
-		try {
-			return comp.query(message_ID, TTL, file_name);
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		return null;
-
-	}
-
 	@Override
-	public byte[] obtain(String Filename) throws RemoteException,
+	public TransferVo obtain(String Filename) throws RemoteException,
 			FileNotFoundException {
 		System.out.println("inside the obtain file");
-		// FileVo fvo = new FileVo();
-		byte[] bucket = new byte[1024];
-		
-		InputStream inStream = new BufferedInputStream(new FileInputStream(new File(
-				StringConstants.localDir + "/" + Filename)));
+
+		File inputFile = new File(StringConstants.MasterDir + "/" + Filename);
+		InputStream inStream = new BufferedInputStream(new FileInputStream(
+				inputFile));
+		byte[] bucket = new byte[(int) inputFile.length()];
+
 		int bytesRead = 0;
-		while (bytesRead >-1) {
+		while (bytesRead > -1) {
 			try {
 				bytesRead = inStream.read(bucket);
 
@@ -186,45 +118,53 @@ public class GetInfo extends UnicastRemoteObject implements Serializable,
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		// you are getting the masters last modified date and adding version and
+		// sending it to client where it wil down load
+		// and save it in
+		SingletonRecords slr = SingletonRecords.getInstance();
 
-		return bucket;
-
-	}
-
-	public void getFileData(String Filename, Vo valueObj) {
-		try {
-			System.out.println("you are in the get file data");
-			System.out.println(valueObj.toString());
-
-			Registry registry = LocateRegistry.getRegistry(
-					valueObj.getPeerServer_IP(), valueObj.getPeerServer_port());
-
-			Com_InterFace comp = (Com_InterFace) registry.lookup(valueObj
-					.getIndexName());
-
-			System.out.println("got input from the server");
-
-			byte[] bucket = comp.obtain(Filename);
-			System.out.println("got ");
-			/*
-			 * if (fvoGet == null) System.out.println("there is no input");
-			 */
-		//	byte[] bucket = fvoGet;
-
-			BufferedOutputStream bot = new BufferedOutputStream(new FileOutputStream(
-					new File(StringConstants.localDir + "/" + Filename)));
-			System.out.println("bucket length" + bucket.length);
-			
-			bot.write(bucket, 0, bucket.length);// assuming 10 mb of file at the
-			// max
-			bot.flush();
-			bot.close();
-			System.out.println("file transfered");
-
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		FileVO fvo = slr.mastermap.get(Filename);
+		TransferVo tvo = new TransferVo();
+		tvo.setSendFile(bucket);
+		tvo.setFvo(fvo);
+		return tvo;
 
 	}
+
+	@Override
+	public void invalidation(String filenameIN, FileVO fvo)
+			throws FileNotFoundException, IOException, NotBoundException {
+		
+		SingletonRecords srs= SingletonRecords.getInstance();
+		SupportFunc1 sf1 = new SupportFunc1();
+
+		
+
+			if (srs.downloadmap.size()!=0) {
+				if(srs.downloadmap.containsKey(filenameIN)==true){
+				if(srs.downloadmap.get(filenameIN).getModifiedDate()!=fvo.getModifiedDate())
+					fvo.setInvalidate(true);
+					srs.downloadmap.put(filenameIN, fvo);
+				System.out.println("file"+filenameIN+"is invalidated");
+							}
+				}
+		
+				if (sf1.check_configFile() == true) {
+					System.out.println("checking with the peers");
+					ArrayList<Vo> tempList = sf1.getPeerList();
+					for (Vo vo : tempList) {
+
+						 sf1.checkPeersFiles(
+								vo.getIndexName(), vo.getPeerServer_IP(),
+								vo.getPeerServer_port(),filenameIN,fvo);
+					}
+
+				}
+
+		
+
+		
+	}
+
+	
 }

@@ -15,8 +15,10 @@ public class Serve implements Runnable {
 		System.out.println("testing1:you are there in the serve");
 		while (!(StringConstants.ip != null
 				&& StringConstants.ip_config != null
-				&& StringConstants.localDir != null
-				&& StringConstants.servername != null && StringConstants.port != 0)) {
+				&& StringConstants.MasterDir != null
+				&& StringConstants.servername != null
+				&& StringConstants.DownloadDir != null
+				&& StringConstants.port != 0 && StringConstants.initialLoad != false)) {
 			// this will keep going till all the parameter are set
 			try {
 				Thread.sleep(5000);
